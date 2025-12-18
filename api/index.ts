@@ -1,47 +1,21 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import express, { Request, Response } from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
 import compression from 'compression';
 
 // Criar app uma única vez (reutilizado em warm starts)
 let app: express.Application | null = null;
 let routesLoaded = false;
 
-// CORS origins do env
-const getCorsOrigins = () => {
-  const origins = process.env.CORS_ORIGINS?.split(',').map(s => s.trim()) || [
-    'http://localhost:3000',
-    'https://operly-client.vercel.app',
-    'https://operlyapp.com'
-  ];
-  console.log('CORS Origins:', origins);
-  return origins;
-};
-
 function getApp(): express.Application {
   if (app) return app;
 
   app = express();
 
-  // CORS - DEVE vir ANTES do helmet e de tudo mais
-  const corsOptions = {
-    origin: getCorsOrigins(),
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    optionsSuccessStatus: 200, // Para browsers antigos
-  };
-  
-  app.use(cors(corsOptions));
-  
-  // Responder OPTIONS manualmente para garantir
-  app.options('*', cors(corsOptions));
-
-  // Security (depois do CORS)
-  app.use(helmet({
-    crossOriginResourcePolicy: { policy: 'cross-origin' },
-  }));
+  // CORS já está configurado no vercel.json
+  // Apenas garantir que OPTIONS responde OK
+  app.options('*', (_req, res) => {
+    res.status(200).end();
+  });
 
   // Parsing
   app.use(express.json({ limit: '10mb' }));
@@ -55,7 +29,6 @@ function getApp(): express.Application {
       message: 'Operly API is running',
       timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV || 'development',
-      corsOrigins: getCorsOrigins(),
     });
   });
 
