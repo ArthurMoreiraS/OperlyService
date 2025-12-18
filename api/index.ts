@@ -12,12 +12,12 @@ function corsMiddleware(req: Request, res: Response, next: NextFunction) {
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
-  
+
   // Responder imediatamente para OPTIONS
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
-  
+
   next();
 }
 
