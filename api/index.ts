@@ -1,66 +1,98 @@
-import express, { Request, Response } from 'express';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 
-// Import routes
-import { authRoutes } from '../src/modules/auth';
-import { businessRoutes } from '../src/modules/business';
-import { servicesRoutes } from '../src/modules/services';
-import { customersRoutes } from '../src/modules/customers';
-import { appointmentsRoutes } from '../src/modules/appointments';
-import { dashboardRoutes } from '../src/modules/dashboard';
-import { publicRoutes } from '../src/modules/public';
-import { billingRoutes } from '../src/modules/billing';
-import { errorMiddleware } from '../src/shared/middlewares';
-import { config } from '../src/config';
+// Criar app uma única vez (reutilizado em warm starts)
+let app: express.Application | null = null;
+let routesLoaded = false;
 
-const app = express();
+function getApp(): express.Application {
+  if (app) return app;
+  
+  app = express();
 
-// Security
-app.use(helmet());
-app.use(cors({
-  origin: config.cors.origins,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
+  // Security
+  app.use(helmet());
+  
+  // CORS - pegar origins do env
+  const corsOrigins = process.env.CORS_ORIGINS?.split(',').map(s => s.trim()) || ['http://localhost:3000'];
+  app.use(cors({
+    origin: corsOrigins,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  }));
 
-// Parsing
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(compression());
+  // Parsing
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  app.use(compression());
 
-// Health check
-app.get('/health', (_req: Request, res: Response) => {
-  res.status(200).json({
-    success: true,
-    message: 'Operly API is running',
-    timestamp: new Date().toISOString(),
-    environment: config.nodeEnv,
+  // Health check (sempre funciona, sem dependências)
+  app.get('/health', (_req: Request, res: Response) => {
+    res.status(200).json({
+      success: true,
+      message: 'Operly API is running',
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || 'development',
+    });
   });
-});
 
-// API Routes
-const API_PREFIX = '/api/v1';
-app.use(`${API_PREFIX}/auth`, authRoutes);
-app.use(`${API_PREFIX}/business`, businessRoutes);
-app.use(`${API_PREFIX}/services`, servicesRoutes);
-app.use(`${API_PREFIX}/customers`, customersRoutes);
-app.use(`${API_PREFIX}/appointments`, appointmentsRoutes);
-app.use(`${API_PREFIX}/dashboard`, dashboardRoutes);
-app.use(`${API_PREFIX}/public`, publicRoutes);
-app.use(`${API_PREFIX}/billing`, billingRoutes);
+  return app;
+}
 
-// 404
-app.use((_req: Request, res: Response) => {
-  res.status(404).json({
-    success: false,
-    message: 'Rota não encontrada',
-  });
-});
+// Handler para Vercel
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const expressApp = getApp();
+  
+  // Carregar rotas apenas uma vez
+  if (!routesLoaded) {
+    try {
+      // Import routes
+      const { authRoutes } = await import('../src/modules/auth');
+      const { businessRoutes } = await import('../src/modules/business');
+      const { servicesRoutes } = await import('../src/modules/services');
+      const { customersRoutes } = await import('../src/modules/customers');
+      const { appointmentsRoutes } = await import('../src/modules/appointments');
+      const { dashboardRoutes } = await import('../src/modules/dashboard');
+      const { publicRoutes } = await import('../src/modules/public');
+      const { billingRoutes } = await import('../src/modules/billing');
+      const { errorMiddleware } = await import('../src/shared/middlewares');
 
-// Error handler
-app.use(errorMiddleware);
+      // Mount routes
+      const API_PREFIX = '/api/v1';
+      expressApp.use(`${API_PREFIX}/auth`, authRoutes);
+      expressApp.use(`${API_PREFIX}/business`, businessRoutes);
+      expressApp.use(`${API_PREFIX}/services`, servicesRoutes);
+      expressApp.use(`${API_PREFIX}/customers`, customersRoutes);
+      expressApp.use(`${API_PREFIX}/appointments`, appointmentsRoutes);
+      expressApp.use(`${API_PREFIX}/dashboard`, dashboardRoutes);
+      expressApp.use(`${API_PREFIX}/public`, publicRoutes);
+      expressApp.use(`${API_PREFIX}/billing`, billingRoutes);
 
-export default app;
+      // 404 handler
+      expressApp.use((_req: Request, res: Response) => {
+        res.status(404).json({
+          success: false,
+          message: 'Rota não encontrada',
+        });
+      });
+
+      // Error handler
+      expressApp.use(errorMiddleware);
+      
+      routesLoaded = true;
+    } catch (error) {
+      console.error('Error loading routes:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to initialize API',
+        error: process.env.NODE_ENV !== 'production' ? String(error) : undefined,
+      });
+    }
+  }
+
+  return expressApp(req, res);
+}

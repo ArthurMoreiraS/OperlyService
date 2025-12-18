@@ -20,8 +20,9 @@ const parsedEnv = envSchema.safeParse(process.env);
 
 if (!parsedEnv.success) {
   console.error('❌ Invalid environment variables:');
-  console.error(parsedEnv.error.flatten().fieldErrors);
-  process.exit(1);
+  console.error(JSON.stringify(parsedEnv.error.flatten().fieldErrors, null, 2));
+  // Em ambiente serverless, throw ao invés de process.exit para melhor debug
+  throw new Error(`Environment validation failed: ${JSON.stringify(parsedEnv.error.flatten().fieldErrors)}`);
 }
 
 export const env = parsedEnv.data;
