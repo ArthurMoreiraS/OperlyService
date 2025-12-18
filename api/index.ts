@@ -1,34 +1,46 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import express, { Request, Response, NextFunction } from 'express';
+import express, { Request, Response } from 'express';
 import compression from 'compression';
 
 // Criar app uma única vez (reutilizado em warm starts)
 let app: express.Application | null = null;
 let routesLoaded = false;
 
-// Middleware CORS manual
-function corsMiddleware(req: Request, res: Response, next: NextFunction): void {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
+function setCorsHeaders(req: VercelRequest, res: VercelResponse): void {
+  const origin = req.headers.origin;
 
-  // Responder imediatamente para OPTIONS
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+  const allowedOrigins = (process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  // Se não tiver env configurado, permitir origens comuns de dev/prod
+  const fallbackOrigins = [
+    'http://localhost:3000',
+    'https://operly-client.vercel.app',
+    'https://operlyapp.com',
+  ];
+
+  const allowList = allowedOrigins.length ? allowedOrigins : fallbackOrigins;
+
+  // Se a origem estiver na allowlist, ecoa a origem (compatível com credentials caso use no futuro)
+  if (typeof origin === 'string' && allowList.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+  } else {
+    // Para chamadas sem Origin (ex: curl/server-to-server) ou origem não permitida
+    // não setamos um origin específico.
   }
 
-  next();
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.setHeader('Access-Control-Max-Age', '86400');
 }
 
 function getApp(): express.Application {
   if (app) return app;
 
   app = express();
-
-  // CORS - primeira coisa a ser executada
-  app.use(corsMiddleware);
 
   // Parsing
   app.use(express.json({ limit: '10mb' }));
@@ -50,6 +62,15 @@ function getApp(): express.Application {
 
 // Handler para Vercel
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // CORS precisa ser aplicado ANTES de qualquer outra coisa, inclusive erros
+  setCorsHeaders(req, res);
+
+  // Preflight nunca deve depender de inicialização de rotas/DB
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return;
+  }
+
   const expressApp = getApp();
 
   // Carregar rotas apenas uma vez
@@ -91,13 +112,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       routesLoaded = true;
     } catch (error) {
       console.error('Error loading routes:', error);
-      return res.status(500).json({
+      res.status(500).json({
         success: false,
         message: 'Failed to initialize API',
         error: process.env.NODE_ENV !== 'production' ? String(error) : undefined,
       });
+      return;
     }
   }
 
-  return expressApp(req, res);
+  // Express irá responder; se cair em 404/500 internos, ainda terá CORS porque setamos acima
+  expressApp(req, res);
 }
