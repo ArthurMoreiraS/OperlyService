@@ -629,7 +629,7 @@ export class BillingService {
 
     const revenueByDayMap = new Map<string, { revenue: number; count: number }>();
     payments.forEach((p) => {
-      const dateKey = p.paidAt.toISOString().split('T')[0];
+      const dateKey = p.paidAt.toISOString().split('T')[0] as string;
       const existing = revenueByDayMap.get(dateKey) || { revenue: 0, count: 0 };
       revenueByDayMap.set(dateKey, {
         revenue: existing.revenue + Number(p.amount),

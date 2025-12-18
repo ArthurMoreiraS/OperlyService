@@ -213,7 +213,7 @@ export class CustomersController {
 
       const { id, vehicleId } = req.params;
       const data = req.body as UpdateVehicleInput;
-      const vehicle = await customersService.updateVehicle(id, vehicleId, businessId, data);
+      const vehicle = await customersService.updateVehicle(id, vehicleId!, businessId, data);
 
       res.status(200).json(
         ApiResponseHelper.success(vehicle, 'Veículo atualizado com sucesso')
@@ -236,7 +236,7 @@ export class CustomersController {
       }
 
       const { id, vehicleId } = req.params;
-      await customersService.deleteVehicle(id, vehicleId, businessId);
+      await customersService.deleteVehicle(id, vehicleId!, businessId);
 
       res.status(200).json(
         ApiResponseHelper.success(null, 'Veículo removido com sucesso')
