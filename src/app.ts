@@ -104,4 +104,10 @@ export function createApp(): Application {
   return app;
 }
 
-export default createApp();
+const app = createApp();
+
+// Export default compatível com runtimes serverless (ex: Vercel Node):
+// precisa ser uma função (req, res) ou um http.Server.
+export default function handler(req: Request, res: Response) {
+  return app(req, res);
+}
