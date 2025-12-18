@@ -7,7 +7,7 @@ let app: express.Application | null = null;
 let routesLoaded = false;
 
 // Middleware CORS manual
-function corsMiddleware(req: Request, res: Response, next: NextFunction) {
+function corsMiddleware(req: Request, res: Response, next: NextFunction): void {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
@@ -15,7 +15,8 @@ function corsMiddleware(req: Request, res: Response, next: NextFunction) {
 
   // Responder imediatamente para OPTIONS
   if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+    res.status(200).end();
+    return;
   }
 
   next();
