@@ -1,6 +1,9 @@
 import { createApp } from '../src/app';
+import { VercelRequest, VercelResponse } from '@vercel/node';
 
-// Vercel Serverless Function Handler
 const app = createApp();
 
-export default app;
+// Vercel Serverless Function Handler
+export default function handler(req: VercelRequest, res: VercelResponse) {
+  return app(req, res);
+}
