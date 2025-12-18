@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import express, { Request, Response, NextFunction } from 'express';
+import express, { Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -8,21 +8,39 @@ import compression from 'compression';
 let app: express.Application | null = null;
 let routesLoaded = false;
 
+// CORS origins do env
+const getCorsOrigins = () => {
+  const origins = process.env.CORS_ORIGINS?.split(',').map(s => s.trim()) || [
+    'http://localhost:3000',
+    'https://operly-client.vercel.app',
+    'https://operlyapp.com'
+  ];
+  console.log('CORS Origins:', origins);
+  return origins;
+};
+
 function getApp(): express.Application {
   if (app) return app;
-  
+
   app = express();
 
-  // Security
-  app.use(helmet());
-  
-  // CORS - pegar origins do env
-  const corsOrigins = process.env.CORS_ORIGINS?.split(',').map(s => s.trim()) || ['http://localhost:3000'];
-  app.use(cors({
-    origin: corsOrigins,
+  // CORS - DEVE vir ANTES do helmet e de tudo mais
+  const corsOptions = {
+    origin: getCorsOrigins(),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    optionsSuccessStatus: 200, // Para browsers antigos
+  };
+  
+  app.use(cors(corsOptions));
+  
+  // Responder OPTIONS manualmente para garantir
+  app.options('*', cors(corsOptions));
+
+  // Security (depois do CORS)
+  app.use(helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
   }));
 
   // Parsing
@@ -37,6 +55,7 @@ function getApp(): express.Application {
       message: 'Operly API is running',
       timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV || 'development',
+      corsOrigins: getCorsOrigins(),
     });
   });
 
@@ -46,7 +65,7 @@ function getApp(): express.Application {
 // Handler para Vercel
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const expressApp = getApp();
-  
+
   // Carregar rotas apenas uma vez
   if (!routesLoaded) {
     try {
@@ -82,7 +101,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // Error handler
       expressApp.use(errorMiddleware);
-      
+
       routesLoaded = true;
     } catch (error) {
       console.error('Error loading routes:', error);
