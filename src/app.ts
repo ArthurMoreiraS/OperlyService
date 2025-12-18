@@ -111,3 +111,13 @@ const app = createApp();
 export default function handler(req: Request, res: Response) {
   return app(req, res);
 }
+
+// Alguns loaders/runtimes (incluindo cenários na Vercel) tratam `module.exports`
+// como o "default export". Se deixarmos o objeto `exports` padrão do TS,
+// isso vira um objeto (inválido). Garantimos que seja a função handler.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(module as any).exports = handler;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(module as any).exports.default = handler;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(module as any).exports.createApp = createApp;
